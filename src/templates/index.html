@@ -1,0 +1,482 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ShieldAI - Security Operations Center</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap');
+        
+        * {
+            font-family: 'Inter', sans-serif;
+        }
+        
+        body {
+            background: linear-gradient(135deg, #0f172a 0%, #111827 100%);
+            color: #e5e7eb;
+        }
+        
+        .glow-green { box-shadow: 0 0 20px rgba(34, 197, 94, 0.3); }
+        .glow-red { box-shadow: 0 0 20px rgba(239, 68, 68, 0.3); }
+        .glow-yellow { box-shadow: 0 0 20px rgba(245, 158, 11, 0.3); }
+        
+        @keyframes pulse-critical {
+            0%, 100% { opacity: 1; box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.4); }
+            50% { opacity: 0.8; }
+        }
+        
+        .pulse-alert { animation: pulse-critical 2s infinite; }
+        
+        @keyframes blink {
+            0%, 49%, 100% { opacity: 1; }
+            50%, 99% { opacity: 0.3; }
+        }
+        
+        .blink-indicator { animation: blink 1s infinite; }
+        .card-hover { transition: all 0.3s ease; }
+        .card-hover:hover { transform: translateY(-2px); box-shadow: 0 0 30px rgba(34, 197, 94, 0.2); }
+        
+        .chart-container { background: rgba(17, 24, 39, 0.6); backdrop-filter: blur(10px); border: 1px solid rgba(59, 130, 246, 0.1); }
+        
+        .alert-row { border-left: 4px solid; transition: all 0.2s ease; }
+        .alert-row.critical { border-left-color: #ef4444; background: rgba(239, 68, 68, 0.05); }
+        .alert-row.high { border-left-color: #f59e0b; background: rgba(245, 158, 11, 0.05); }
+        .alert-row.medium { border-left-color: #eab308; background: rgba(234, 179, 8, 0.05); }
+        .alert-row.low { border-left-color: #22c55e; background: rgba(34, 197, 94, 0.05); }
+        .alert-row:hover { transform: translateX(4px); background: rgba(59, 130, 246, 0.1); }
+        
+        .stat-card-gradient { background: linear-gradient(135deg, rgba(17, 24, 39, 0.7) 0%, rgba(31, 41, 55, 0.5) 100%); }
+        
+        .badge-active { display: inline-flex; align-items: center; gap: 0.5rem; padding: 0.5rem 1rem; background: rgba(34, 197, 94, 0.1); border: 1px solid rgba(34, 197, 94, 0.3); border-radius: 0.375rem; font-size: 0.875rem; font-weight: 600; color: #22c55e; }
+        .indicator-dot { width: 0.5rem; height: 0.5rem; border-radius: 50%; background: #22c55e; animation: blink 1s infinite; }
+        .update-indicator { font-size: 0.75rem; color: #9ca3af; }
+    </style>
+</head>
+<body class="bg-gradient-to-br from-slate-900 via-gray-900 to-slate-900">
+    <div class="min-h-screen p-4 md:p-8">
+        <!-- Header -->
+        <header class="mb-8">
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-4 items-start md:items-center">
+                <div>
+                    <div class="flex items-center gap-3 mb-2">
+                        <div class="text-3xl">🛡️</div>
+                        <div>
+                            <h1 class="text-3xl md:text-4xl font-bold text-white">ShieldAI</h1>
+                            <p class="text-xs md:text-sm text-gray-400">SOC Monitoring System v1.0</p>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="hidden md:flex justify-center">
+                    <div class="text-center">
+                        <p class="text-gray-400 text-sm mb-1">Threat Level</p>
+                        <div class="badge-active justify-center">
+                            <div class="indicator-dot"></div>
+                            <span id="threatLevelBadge">LOW</span>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="flex flex-col md:flex-col items-start md:items-end gap-2">
+                    <div class="text-right">
+                        <p class="text-2xl md:text-3xl font-mono font-bold text-green-400" id="currentTime">00:00:00</p>
+                        <p class="text-xs md:text-sm text-gray-500">Production | Demo</p>
+                    </div>
+                    <div class="update-indicator">
+                        Last Updated: <span id="lastUpdate">just now</span>
+                    </div>
+                </div>
+            </div>
+        </header>
+
+        <!-- Stats Cards -->
+        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
+            <div class="stat-card-gradient rounded-lg border border-blue-500/10 p-5 card-hover glow-green">
+                <div class="flex justify-between items-start mb-3">
+                    <div>
+                        <p class="text-gray-400 text-xs font-semibold tracking-wider">TOTAL TRAFFIC</p>
+                        <div class="text-3xl md:text-4xl font-bold text-white mt-2" id="totalTraffic">0</div>
+                    </div>
+                    <div class="text-2xl">📊</div>
+                </div>
+                <div class="flex items-center gap-1">
+                    <span class="text-red-400">↑</span>
+                    <span class="text-xs text-gray-400">packets/min</span>
+                </div>
+            </div>
+
+            <div class="stat-card-gradient rounded-lg border border-red-500/10 p-5 card-hover" id="attackCard">
+                <div class="flex justify-between items-start mb-3">
+                    <div>
+                        <p class="text-gray-400 text-xs font-semibold tracking-wider">DETECTED ATTACKS</p>
+                        <div class="text-3xl md:text-4xl font-bold text-white mt-2" id="detectedAttacks">0</div>
+                    </div>
+                    <div class="text-2xl">⚠️</div>
+                </div>
+                <div class="flex items-center gap-1">
+                    <span class="text-red-400">↑</span>
+                    <span class="text-xs text-gray-400">active threats</span>
+                </div>
+            </div>
+
+            <div class="stat-card-gradient rounded-lg border border-yellow-500/10 p-5 card-hover">
+                <div class="flex justify-between items-start mb-3">
+                    <div>
+                        <p class="text-gray-400 text-xs font-semibold tracking-wider">BLOCKED IPS</p>
+                        <div class="text-3xl md:text-4xl font-bold text-white mt-2" id="blockedIPs">0</div>
+                    </div>
+                    <div class="text-2xl">🚫</div>
+                </div>
+                <div class="flex items-center gap-1">
+                    <span class="text-green-400">↓</span>
+                    <span class="text-xs text-gray-400">quarantined</span>
+                </div>
+            </div>
+
+            <div class="stat-card-gradient rounded-lg border border-green-500/10 p-5 card-hover glow-green">
+                <div class="flex justify-between items-start mb-3">
+                    <div>
+                        <p class="text-gray-400 text-xs font-semibold tracking-wider">AI STATUS</p>
+                        <div class="text-3xl md:text-4xl font-bold text-green-400 mt-2" id="aiStatus">ACTIVE</div>
+                    </div>
+                    <div class="text-2xl">🤖</div>
+                </div>
+                <div class="flex items-center gap-1">
+                    <span class="blink-indicator inline-block w-2 h-2 bg-green-400 rounded-full"></span>
+                    <span class="text-xs text-gray-400">monitoring</span>
+                </div>
+            </div>
+        </div>
+
+        <!-- Charts Row -->
+        <div class="grid grid-cols-1 lg:grid-cols-3 gap-8 mb-8">
+            <div class="lg:col-span-2">
+                <div class="chart-container rounded-lg border border-blue-500/10 p-6">
+                    <h2 class="text-lg font-bold text-white mb-4 flex items-center gap-2">
+                        <span>📈</span> Real-Time Traffic Analysis
+                        <span class="text-xs font-normal text-gray-400 ml-auto">Last 20 updates</span>
+                    </h2>
+                    <div class="relative h-80">
+                        <canvas id="trafficChart"></canvas>
+                    </div>
+                </div>
+            </div>
+
+            <div class="chart-container rounded-lg border border-blue-500/10 p-6">
+                <h2 class="text-lg font-bold text-white mb-4 flex items-center gap-2">
+                    <span>🎯</span> Threat Level
+                </h2>
+                <div class="flex flex-col items-center justify-center h-80">
+                    <div class="relative w-48 h-48 mb-4">
+                        <canvas id="threatGauge"></canvas>
+                    </div>
+                    <div id="threatPercentage" class="text-3xl font-bold text-gray-300">0%</div>
+                    <p class="text-xs text-gray-500 mt-2">Risk Score</p>
+                    
+                    <div class="w-full mt-6 space-y-2 text-xs">
+                        <div class="flex items-center gap-2">
+                            <div class="w-3 h-3 rounded bg-green-500"></div>
+                            <span class="text-gray-400">LOW</span>
+                        </div>
+                        <div class="flex items-center gap-2">
+                            <div class="w-3 h-3 rounded bg-yellow-500"></div>
+                            <span class="text-gray-400">MEDIUM</span>
+                        </div>
+                        <div class="flex items-center gap-2">
+                            <div class="w-3 h-3 rounded bg-orange-500"></div>
+                            <span class="text-gray-400">HIGH</span>
+                        </div>
+                        <div class="flex items-center gap-2">
+                            <div class="w-3 h-3 rounded bg-red-500"></div>
+                            <span class="text-gray-400">CRITICAL</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Attack Distribution -->
+        <div class="grid grid-cols-1 lg:grid-cols-2 gap-8 mb-8">
+            <div class="chart-container rounded-lg border border-blue-500/10 p-6">
+                <h2 class="text-lg font-bold text-white mb-4 flex items-center gap-2">
+                    <span>🔍</span> Attack Distribution
+                </h2>
+                <div class="relative h-80">
+                    <canvas id="attackChart"></canvas>
+                </div>
+            </div>
+
+            <div class="chart-container rounded-lg border border-blue-500/10 p-6">
+                <h2 class="text-lg font-bold text-white mb-4 flex items-center gap-2">
+                    <span>📋</span> Attack Statistics
+                </h2>
+                <div class="space-y-4">
+                    <div class="flex justify-between items-center p-3 bg-gray-800/30 rounded">
+                        <span class="text-gray-400">DDOS Attacks</span>
+                        <span class="text-white font-bold" id="ddosCount">0</span>
+                    </div>
+                    <div class="flex justify-between items-center p-3 bg-gray-800/30 rounded">
+                        <span class="text-gray-400">Port Scans</span>
+                        <span class="text-white font-bold" id="portscanCount">0</span>
+                    </div>
+                    <div class="flex justify-between items-center p-3 bg-gray-800/30 rounded">
+                        <span class="text-gray-400">Brute Force</span>
+                        <span class="text-white font-bold" id="bruteforceCount">0</span>
+                    </div>
+                    <div class="flex justify-between items-center p-3 bg-gray-800/30 rounded">
+                        <span class="text-gray-400">SQL Injection</span>
+                        <span class="text-white font-bold" id="sqlinjectionCount">0</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Live Alerts Table -->
+        <div class="chart-container rounded-lg border border-blue-500/10 p-6 mb-8">
+            <h2 class="text-lg font-bold text-white mb-4 flex items-center gap-2">
+                <span>🚨</span> Live Alert Feed
+                <span class="text-xs font-normal text-gray-400 ml-auto">Last 10 alerts</span>
+            </h2>
+            
+            <div class="overflow-x-auto">
+                <table class="w-full">
+                    <thead>
+                        <tr class="border-b border-gray-700">
+                            <th class="text-left py-3 px-3 text-xs font-semibold text-gray-400 tracking-wider">TIME</th>
+                            <th class="text-left py-3 px-3 text-xs font-semibold text-gray-400 tracking-wider">SOURCE IP</th>
+                            <th class="text-left py-3 px-3 text-xs font-semibold text-gray-400 tracking-wider">ATTACK TYPE</th>
+                            <th class="text-left py-3 px-3 text-xs font-semibold text-gray-400 tracking-wider">THREAT LEVEL</th>
+                            <th class="text-left py-3 px-3 text-xs font-semibold text-gray-400 tracking-wider">AI DECISION</th>
+                            <th class="text-left py-3 px-3 text-xs font-semibold text-gray-400 tracking-wider">STATUS</th>
+                        </tr>
+                    </thead>
+                    <tbody id="alertsTableBody">
+                        <tr class="alert-row low">
+                            <td colspan="6" class="py-8 px-3 text-center text-gray-500">
+                                <div class="flex justify-center items-center gap-2">
+                                    <div class="w-2 h-2 bg-gray-600 rounded-full animate-bounce"></div>
+                                    <div class="w-2 h-2 bg-gray-600 rounded-full animate-bounce" style="animation-delay: 0.1s"></div>
+                                    <div class="w-2 h-2 bg-gray-600 rounded-full animate-bounce" style="animation-delay: 0.2s"></div>
+                                </div>
+                            </td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+        <!-- Footer -->
+        <footer class="mt-12 pt-8 border-t border-gray-800 text-center">
+            <p class="text-sm text-gray-500">
+                ShieldAI Security Operations Center | Powered by Advanced AI Threat Detection
+            </p>
+            <p class="text-xs text-gray-600 mt-2">
+                Data refreshes every 2 seconds | All times in UTC
+            </p>
+        </footer>
+    </div>
+
+    <script>
+        let trafficChart, attackChart, threatGauge;
+        let trafficLabels = [];
+        let trafficNormalData = [];
+        let trafficAttackData = [];
+
+        function updateTime() {
+            const now = new Date();
+            document.getElementById('currentTime').innerText = now.toLocaleTimeString('en-US', {
+                hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: false
+            });
+        }
+        setInterval(updateTime, 1000);
+        updateTime();
+
+        async function fetchStats() {
+            try {
+                const response = await fetch('/api/stats');
+                const data = await response.json();
+                
+                document.getElementById('totalTraffic').innerText = data.total_traffic;
+                document.getElementById('detectedAttacks').innerText = data.detected_attacks;
+                document.getElementById('blockedIPs').innerText = data.blocked_ips;
+                document.getElementById('aiStatus').innerText = data.ai_status;
+                
+                const threatCard = document.getElementById('attackCard');
+                document.getElementById('threatLevelBadge').innerText = data.threat_level;
+                threatCard.classList.remove('glow-green', 'glow-red', 'glow-yellow', 'pulse-alert');
+                if (data.threat_level === 'CRITICAL') {
+                    threatCard.classList.add('glow-red', 'pulse-alert');
+                } else if (data.threat_level === 'HIGH') {
+                    threatCard.classList.add('glow-yellow');
+                } else if (data.threat_level === 'MEDIUM') {
+                    threatCard.classList.add('glow-yellow');
+                } else {
+                    threatCard.classList.add('glow-green');
+                }
+                
+                updateThreatGauge(data.threat_level, data.detected_attacks);
+            } catch (error) {
+                console.error('Error fetching stats:', error);
+            }
+        }
+
+        async function fetchChartData() {
+            try {
+                const response = await fetch('/api/chart-data');
+                const data = await response.json();
+                
+                const now = new Date().toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit' });
+                trafficLabels.push(now);
+                trafficNormalData.push(data.normal);
+                trafficAttackData.push(data.attack);
+                
+                if (trafficLabels.length > 20) {
+                    trafficLabels.shift();
+                    trafficNormalData.shift();
+                    trafficAttackData.shift();
+                }
+                
+                if (trafficChart) {
+                    trafficChart.data.labels = trafficLabels;
+                    trafficChart.data.datasets[0].data = trafficNormalData;
+                    trafficChart.data.datasets[1].data = trafficAttackData;
+                    trafficChart.update();
+                }
+            } catch (error) {
+                console.error('Error fetching chart data:', error);
+            }
+        }
+
+        async function fetchAlerts() {
+            try {
+                const response = await fetch('/api/alerts');
+                const alerts = await response.json();
+                updateAlertsTable(alerts);
+            } catch (error) {
+                console.error('Error fetching alerts:', error);
+            }
+        }
+
+        function updateAlertsTable(alerts) {
+            const tableBody = document.getElementById('alertsTableBody');
+            
+            if (alerts.length === 0) {
+                tableBody.innerHTML = `<tr class="alert-row low"><td colspan="6" class="py-8 px-3 text-center text-gray-500">No attacks detected - System secure ✓</td></tr>`;
+                return;
+            }
+            
+            tableBody.innerHTML = alerts.slice().reverse().map(alert => {
+                const threatLevel = alert.threat_level.toLowerCase();
+                const statusClass = `alert-row ${threatLevel}`;
+                const statusColor = {
+                    'critical': 'text-red-400', 'high': 'text-orange-400',
+                    'medium': 'text-yellow-400', 'low': 'text-green-400'
+                }[threatLevel] || 'text-gray-400';
+                
+                return `<tr class="${statusClass}">
+                    <td class="py-3 px-3 text-sm font-mono">${alert.time}</td>
+                    <td class="py-3 px-3 text-sm text-gray-300">${alert.source_ip}</td>
+                    <td class="py-3 px-3 text-sm"><span class="px-2 py-1 rounded bg-gray-800 text-xs font-medium">${alert.attack_type}</span></td>
+                    <td class="py-3 px-3 text-sm"><span class="${statusColor} font-semibold">${alert.threat_level}</span></td>
+                    <td class="py-3 px-3 text-sm font-semibold">${alert.ai_decision}</td>
+                    <td class="py-3 px-3 text-sm"><span class="inline-flex items-center gap-1"><span class="w-2 h-2 rounded-full ${threatLevel === 'critical' ? 'bg-red-500 animate-pulse' : 'bg-gray-500'}"></span>${alert.ai_decision === 'BLOCKED' ? 'Blocked' : 'Monitored'}</span></td>
+                </tr>`;
+            }).join('');
+        }
+
+        async function fetchThreats() {
+            try {
+                const response = await fetch('/api/threats');
+                const threats = await response.json();
+                
+                document.getElementById('ddosCount').innerText = threats.DDOS || 0;
+                document.getElementById('portscanCount').innerText = threats.PORT_SCAN || 0;
+                document.getElementById('bruteforceCount').innerText = threats.BRUTE_FORCE || 0;
+                document.getElementById('sqlinjectionCount').innerText = threats.SQL_INJECTION || 0;
+                
+                if (attackChart) {
+                    attackChart.data.datasets[0].data = [
+                        threats.DDOS || 0, threats.PORT_SCAN || 0,
+                        threats.BRUTE_FORCE || 0, threats.SQL_INJECTION || 0
+                    ];
+                    attackChart.update();
+                }
+            } catch (error) {
+                console.error('Error fetching threats:', error);
+            }
+        }
+
+        function updateThreatGauge(threatLevel, attackCount) {
+            const riskScores = { 'LOW': 10, 'MEDIUM': 40, 'HIGH': 70, 'CRITICAL': 100 };
+            const riskScore = riskScores[threatLevel] || 10;
+            document.getElementById('threatPercentage').innerText = riskScore + '%';
+            
+            if (threatGauge) {
+                threatGauge.data.datasets[0].data = [riskScore, 100 - riskScore];
+                const colors = {
+                    'LOW': ['#22c55e', '#374151'],
+                    'MEDIUM': ['#eab308', '#374151'],
+                    'HIGH': ['#f59e0b', '#374151'],
+                    'CRITICAL': ['#ef4444', '#374151']
+                };
+                threatGauge.data.datasets[0].backgroundColor = colors[threatLevel] || colors['LOW'];
+                threatGauge.update();
+            }
+        }
+
+        function initializeCharts() {
+            const trafficCtx = document.getElementById('trafficChart').getContext('2d');
+            trafficChart = new Chart(trafficCtx, {
+                type: 'line',
+                data: { labels: [], datasets: [
+                    { label: 'Normal Traffic', data: [], borderColor: '#22c55e', backgroundColor: 'rgba(34, 197, 94, 0.1)', borderWidth: 2, tension: 0.4, fill: true, pointRadius: 4, pointBackgroundColor: '#22c55e', pointBorderColor: '#fff', pointBorderWidth: 1, pointHoverRadius: 6 },
+                    { label: 'Attack Traffic', data: [], borderColor: '#ef4444', backgroundColor: 'rgba(239, 68, 68, 0.1)', borderWidth: 2, tension: 0.4, fill: true, pointRadius: 4, pointBackgroundColor: '#ef4444', pointBorderColor: '#fff', pointBorderWidth: 1, pointHoverRadius: 6 }
+                ]},
+                options: {
+                    responsive: true, maintainAspectRatio: false,
+                    plugins: { legend: { labels: { color: '#e5e7eb', font: { size: 12, weight: '500' }, usePointStyle: true, padding: 15 } }, tooltip: { backgroundColor: 'rgba(17, 24, 39, 0.9)', titleColor: '#e5e7eb', bodyColor: '#e5e7eb', borderColor: 'rgba(59, 130, 246, 0.3)', borderWidth: 1 } },
+                    scales: {
+                        y: { beginAtZero: true, grid: { color: 'rgba(75, 85, 99, 0.1)', drawBorder: false }, ticks: { color: '#9ca3af', font: { size: 11 } } },
+                        x: { grid: { display: false, drawBorder: false }, ticks: { color: '#9ca3af', font: { size: 11 } } }
+                    }
+                }
+            });
+
+            const attackCtx = document.getElementById('attackChart').getContext('2d');
+            attackChart = new Chart(attackCtx, {
+                type: 'doughnut',
+                data: { labels: ['DDOS', 'Port Scan', 'Brute Force', 'SQL Injection'], datasets: [{ data: [0, 0, 0, 0], backgroundColor: ['#ef4444', '#f59e0b', '#eab308', '#ec4899'], borderColor: ['#1f2937', '#1f2937', '#1f2937', '#1f2937'], borderWidth: 2 }] },
+                options: {
+                    responsive: true, maintainAspectRatio: false,
+                    plugins: { legend: { position: 'bottom', labels: { color: '#e5e7eb', font: { size: 12, weight: '500' }, padding: 15 } }, tooltip: { backgroundColor: 'rgba(17, 24, 39, 0.9)', titleColor: '#e5e7eb', bodyColor: '#e5e7eb', borderColor: 'rgba(59, 130, 246, 0.3)', borderWidth: 1, callbacks: { label: (c) => c.label + ': ' + c.parsed + ' attacks' } } }
+                }
+            });
+
+            const gaugeCtx = document.getElementById('threatGauge').getContext('2d');
+            threatGauge = new Chart(gaugeCtx, {
+                type: 'doughnut',
+                data: { labels: ['Risk', 'Safe'], datasets: [{ data: [30, 70], backgroundColor: ['#22c55e', '#374151'], borderColor: ['#1f2937', '#1f2937'], borderWidth: 2 }] },
+                options: { responsive: true, maintainAspectRatio: false, circumference: 180, rotation: 270, plugins: { legend: { display: false }, tooltip: { enabled: false } } }
+            });
+        }
+
+        document.addEventListener('DOMContentLoaded', () => {
+            initializeCharts();
+            fetchStats();
+            fetchChartData();
+            fetchAlerts();
+            fetchThreats();
+            
+            setInterval(() => {
+                fetchStats();
+                fetchChartData();
+                fetchAlerts();
+                fetchThreats();
+                document.getElementById('lastUpdate').innerText = 'just now';
+            }, 2000);
+        });
+    </script>
+</body>
+</html>
